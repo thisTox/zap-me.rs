@@ -59,7 +59,7 @@ where
     NOW: InstantFn,
 {
     /// Sends a shock command to the receiver.
-    pub fn shock(&mut self, strength: u8, duration: impl Into<Duration>) {
+    pub fn shock(&mut self, strength: u8, duration: Duration) {
         self.device.send_command(
             self.channel,
             Command::Shock,
@@ -74,7 +74,7 @@ where
     }
 
     /// Sends a vibration command to the receiver.
-    pub fn vibrate(&mut self, strength: u8, duration: impl Into<Duration>) {
+    pub fn vibrate(&mut self, strength: u8, duration: Duration) {
         self.device.send_command(
             self.channel,
             Command::Vibrate,
@@ -89,7 +89,7 @@ where
     }
 
     /// Sends a beep command to the receiver.
-    pub fn beep(&mut self, duration: impl Into<Duration>) {
+    pub fn beep(&mut self, duration: Duration) {
         self.device
             .send_command(self.channel, Command::Beep, 0, duration);
     }
@@ -144,7 +144,7 @@ where
         channel: Channel,
         command: Command,
         strength: u8,
-        duration: impl Into<Duration>,
+        duration: Duration,
     ) {
         let checksum = ((self.id >> 8) as u8)
             .wrapping_add(self.id as u8)
@@ -155,17 +155,14 @@ where
         let mut timings = TimingVec::new();
 
         timings.extend([840, 1440, PULSE_LEN - ZERO_LEN]);
-
         Self::trbits(self.id, 16, &mut timings);
         Self::trbits(channel as u8, 4, &mut timings);
         Self::trbits(command as u8, 4, &mut timings);
         Self::trbits(strength, 8, &mut timings);
         Self::trbits(checksum, 8, &mut timings);
         Self::trbits(0u16, 2, &mut timings);
-
         timings.extend([ZERO_LEN, 1476]);
 
-        let duration = duration.into();
         let end = (self.now_fn)() + duration;
         while (self.now_fn)() < end {
             self.send_timing(&timings);
