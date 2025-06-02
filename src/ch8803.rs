@@ -10,6 +10,8 @@ const ONE_LEN: u16 = 804;
 pub type Instant = fugit::Instant<u64, 1, 1_000_000>;
 pub type Duration = fugit::Duration<u32, 1, 1_000_000>;
 
+type TimingVec = heapless::Vec<u16, 128>;
+
 pub trait InstantFn: Fn() -> Instant {}
 impl<F: Fn() -> Instant> InstantFn for F {}
 
@@ -144,45 +146,35 @@ where
         strength: u8,
         duration: impl Into<Duration>,
     ) {
-        let mut timings: [u16; 128] = [0; 128];
         let checksum = ((self.id >> 8) as u8)
             .wrapping_add(self.id as u8)
             .wrapping_add(channel as u8)
             .wrapping_add(command as u8)
             .wrapping_add(strength);
 
-        let mut idx = 0;
+        let mut timings = TimingVec::new();
 
-        timings[idx] = 840;
-        idx += 1;
-        timings[idx] = 1440;
-        idx += 1;
-        timings[idx] = PULSE_LEN - ZERO_LEN;
-        idx += 1;
+        timings.extend([840, 1440, PULSE_LEN - ZERO_LEN]);
 
-        Self::trbits(self.id as u32, 16, &mut timings, &mut idx);
-        Self::trbits(channel as u32, 4, &mut timings, &mut idx);
-        Self::trbits(command as u32, 4, &mut timings, &mut idx);
-        Self::trbits(strength as u32, 8, &mut timings, &mut idx);
-        Self::trbits(checksum as u32, 8, &mut timings, &mut idx);
-        Self::trbits(0, 2, &mut timings, &mut idx);
+        Self::trbits(self.id, 16, &mut timings);
+        Self::trbits(channel as u8, 4, &mut timings);
+        Self::trbits(command as u8, 4, &mut timings);
+        Self::trbits(strength, 8, &mut timings);
+        Self::trbits(checksum, 8, &mut timings);
+        Self::trbits(0u16, 2, &mut timings);
 
-        timings[idx] = ZERO_LEN;
-        idx += 1;
-        timings[idx] = 1476;
-        idx += 1;
-        timings[idx] = 0;
+        timings.extend([ZERO_LEN, 1476]);
 
         let duration = duration.into();
         let end = (self.now_fn)() + duration;
         while (self.now_fn)() < end {
-            self.send_timing(&timings[..idx]);
+            self.send_timing(&timings);
         }
     }
 
     fn send_timing(&mut self, timings: &[u16]) {
         let mut level = false;
-        for &duration in timings.iter().take_while(|&&t| t != 0) {
+        for &duration in timings.iter() {
             let _ = if level {
                 self.pin.set_high()
             } else {
@@ -194,14 +186,13 @@ where
         let _ = self.pin.set_low();
     }
 
-    fn trbits(val: u32, bits: u8, timings: &mut [u16], idx: &mut usize) {
+    fn trbits(val: impl Into<u16>, bits: u8, timings: &mut TimingVec) {
+        let val = val.into();
+
         for i in (0..bits).rev() {
             let bit_set = (val >> i) & 1 != 0;
             let len = if bit_set { ONE_LEN } else { ZERO_LEN };
-            timings[*idx] = len;
-            *idx += 1;
-            timings[*idx] = PULSE_LEN - len;
-            *idx += 1;
+            timings.extend([len, PULSE_LEN - len]);
         }
     }
 }
