@@ -3,7 +3,6 @@
 
 use core::cell::RefCell;
 use cortex_m_rt::entry;
-use embedded_hal::digital::v2::OutputPin;
 use panic_halt as _;
 use rp2040_hal::{
     Clock, gpio::Pins, pac, sio::Sio, timer::Timer, watchdog::Watchdog,
