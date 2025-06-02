@@ -5,7 +5,9 @@ use core::cell::RefCell;
 use cortex_m_rt::entry;
 use embedded_hal::digital::v2::OutputPin;
 use panic_halt as _;
-use rp2040_hal::{Clock, gpio::Pins, pac, sio::Sio, timer::Timer, watchdog::Watchdog};
+use rp2040_hal::{
+    Clock, gpio::Pins, pac, sio::Sio, timer::Timer, watchdog::Watchdog,
+};
 
 #[unsafe(link_section = ".boot2")]
 #[used]
@@ -43,29 +45,32 @@ fn main() -> ! {
         sio.gpio_bank0,
         &mut pac.RESETS,
     );
-    let mut delay = cortex_m::delay::Delay::new(core.SYST, clocks.system_clock.freq().to_Hz());
+    let mut delay = cortex_m::delay::Delay::new(
+        core.SYST,
+        clocks.system_clock.freq().to_Hz(),
+    );
 
-    let Pins {
-        gpio16: zap,
-        gpio25: led,
-        ..
-    } = pins;
+    let zap = pins.gpio16.into_push_pull_output();
 
-    let zap = zap.into_push_pull_output();
-    let mut led = led.into_push_pull_output();
-
-    let mut collar = ZapMe::builder()
+    let mut transmitter = ZapMe::builder()
         .pin(zap)
         .delay(&timer)
         .now_fn(|| timer.borrow_mut().get_counter())
         .id(0x0D25)
         .build();
+    let mut collar = transmitter.channel(0);
 
     loop {
-        led.set_high().unwrap();
-        collar.channel(0).beep_ms(500);
-        delay.delay_ms(1000);
-        led.set_low().unwrap();
+        // Send weakest and strongest vibration pulse for 2 seconds each
+        collar.vibrate_ms(1, 2000);
+        collar.vibrate_ms(99, 2000);
+
+        // Send one audio warning (250ms is enough for one beep iteration)
+        collar.beep_ms(250);
         delay.delay_ms(2000);
+
+        // Send shock on level 1
+        //collar.shock_ms(1, 500);
+        delay.delay_ms(3000);
     }
 }
